@@ -10,7 +10,7 @@ const { REST, Routes } = require('discord.js');
 
 const commands = [
   {
-    name: 'ping',
+    name: 'peng',
     description: 'Replies with Pong!',
   },
 ];
