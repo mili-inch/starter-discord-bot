@@ -1,60 +1,52 @@
-
-// const { clientId, guildId, token, publicKey } = require('./config.json');
 require('dotenv').config()
 const APPLICATION_ID = process.env.APPLICATION_ID
 const TOKEN = process.env.TOKEN
 const PUBLIC_KEY = process.env.PUBLIC_KEY || 'not set'
 const GUILD_ID = process.env.GUILD_ID
 
-const { Client, ClientApplication } = require("discord.js");
-/**
- * 
- * @param {Client} client 
- * @param {import("discord.js").ApplicationCommandData[]} commands 
- * @param {import("discord.js").Snowflake} guildID 
- * @returns {Promise<import("@discordjs/collection").Collection<string,import("discord.js").ApplicationCommand>>}
- */
-async function register(client, commands, guildID) {
-  if (guildID == null) {
-    return client.application.commands.set(commands);
+const { Client, Collection, Events, GatewayIntentBits } = require('discord.js');
+const { commands, state } = require('./commands.js');
+
+const client = new Client({ intents: [GatewayIntentBits.Guilds] });
+
+client.commands = new Collection();
+
+commands.forEach(command => {
+  client.commands.set(command.data.name, command);
+})
+
+client.on(Events.InteractionCreate, async interaction => {
+  if (!interaction.isChatInputCommand()) return;
+
+  const command = interaction.client.commands.get(interaction.commandName);
+
+  if (!command) {
+    console.error(`No command matching ${interaction.commandName} was found.`);
+    return;
   }
-  return client.application.commands.set(commands, guildID);
-}
-const ping = {
-  name: "ping",
-  description: "pong!",
-};
-const hello = {
-  name: "hello",
-  description: "botがあなたに挨拶します。",
-  options: [
-    {
-      type: "STRING",
-      name: "language",
-      description: "どの言語で挨拶するか指定します。",
-      required: true,
-      choices: [
-        {
-          name: "English",
-          value: "en"
-        },
-        {
-          name: "Japanese",
-          value: "ja"
-        }
-      ],
-    }
-  ]
-};
-const commands = [ping, hello];
-const client = new Client({
-  intents: 0,
+
+  try {
+    await command.execute(interaction);
+  } catch (error) {
+    console.error(error);
+    await interaction.reply({ content: 'There was an error while executing this command!', ephemeral: true });
+  }
 });
-client.token = APPLICATION_ID;
-async function main() {
-  client.application = new ClientApplication(client, {});
-  await client.application.fetch();
-  await register(client, commands, GUILD_ID);
-  console.log("registration succeed!");
-}
-main().catch(err => console.error(err));
+
+client.login(TOKEN);
+
+setInterval(async () => {
+  if (state.enabledAt) {
+    let messages = [];
+    try {
+      messages = await state.channel.messages.fetch({ limit: 50 })
+    } catch (error) {
+      console.error(error)
+    }
+    try {
+      state.channel.bulkDelete(messages.filter(message => message.createdTimestamp > state.enabledAt && message.createdTimestamp < Date.now() - state.span * 1000))
+    } catch (error) {
+      console.error(error)
+    }
+  }
+}, 1000)
